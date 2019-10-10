@@ -10,6 +10,7 @@ namespace HotelProgram
         static SqlConnection connection = new SqlConnection("Data Source=DESKTOP-C1JLP92\\SQLEXPRESS;Initial Catalog=Hotel;Integrated Security=True");
         static void Main(string[] args)
         {
+            ComprobarHabitacionesReservadas();
             Menu();
         }
         //Función principal
@@ -72,7 +73,7 @@ namespace HotelProgram
                                 string query = $"SELECT Dni FROM Clientes WHERE dni = '{dni}'";
                                 if (ConsultarBase(query)) //mirar que sea un cliente registrado
                                 {
-                                    ModificarBase(CheckIn(dni));
+                                    ModificarBase(CheckIn(dni,false));
                                 }
                                 else
                                 {
@@ -231,7 +232,7 @@ namespace HotelProgram
             }
             return null;
         }
-        public static string CheckIn(string dni)
+        public static string CheckIn(string dni, bool antelacion)
         {
             //TE DA HABITACIONES QUE ESTAN RESERVADAS
             Console.WriteLine("___________________________________");
@@ -259,6 +260,7 @@ namespace HotelProgram
                     if (option == habitaciones[i])
                     {
                         habitacionSeleccionable = true;
+                        i = habitaciones.Count;
                     }
                 }
                 if (habitacionSeleccionable)
@@ -266,7 +268,15 @@ namespace HotelProgram
                     Console.WriteLine("Habitación reservada, muchas gracias");
                     //Añadir en la tabla de reservas
                     int id = IDClienteFromDni(dni);
-                    query = $"INSERT INTO Reservas (IdCliente, IdHabitacion, fechaCheckIn) VALUES ({id},{option},'{DateTime.Now.ToString("dd/MM/yyyy")}')";
+                    if (antelacion)
+                    {
+                        query = $"INSERT INTO Reservas (IdCliente, IdHabitacion, fechaCheckIn) VALUES ({id},{option},'{DateTime.Now.ToString("dd/MM/yyyy")}')";
+                    }
+                    else
+                    {
+                        query = $"INSERT INTO Reservas (IdCliente, IdHabitacion, fechaCheckIn, antelacion) VALUES ({id},{option},'{DateTime.Now.ToString("dd/MM/yyyy")}','NO')";
+                    }
+                    
                     ModificarBase(query);
                     //Modificar el estado de la habitación para marcarlo como ocupado
                     query = $"UPDATE Habitaciones SET Estado = 'Ocupado' WHERE ID = {option}";
@@ -461,7 +471,38 @@ namespace HotelProgram
         }
         public static void ReservaConAntelacion(string dni)
         {
+            ModificarBase(CheckIn(dni,true));
+            ModificarBase(CheckOut(dni));
+            int id = IDClienteFromDni(dni);
+            Console.WriteLine("¿Cuando quieres venir?");
+            string fechaEntrada = Console.ReadLine();
+            Console.WriteLine("¿Cuando te quieres ir?");
+            string fechaSalida = Console.ReadLine();
+            string query = $"UPDATE Reservas SET fechaCheckIn = '{fechaEntrada}', fechaCheckOut ='{fechaSalida}', Antelacion = 'SI' WHERE IdCliente = {id} AND antelacion is null";
+            ModificarBase(query);
 
         }
+        //funcion que compruebe la fecha de hoy para Asignar las que estan ocupadas de reserva anticipada
+        public static void ComprobarHabitacionesReservadas()
+        {
+            string query = $"SELECT * FROM Reservas WHERE FechaCheckIn = '{DateTime.Now.ToString("dd/MM/yyyy")}' AND Antelacion = 'SI'";
+            while (ConsultarBase(query))
+            {
+                int habitacion = 0;
+                query = $"SELECT IdHabitacion FROM Reservas WHERE FechaCheckIn = '{DateTime.Now.ToString("dd/MM/yyyy")}' AND Antelacion = 'SI'";
+                SqlCommand command = new SqlCommand(query, connection);
+                connection.Open();
+                SqlDataReader reader = command.ExecuteReader();
+                if (reader.Read())
+                {
+                    habitacion = Convert.ToInt32(reader[0].ToString());
+                }
+                connection.Close();
+                query = $"UPDATE Habitaciones SET estado like 'Ocupado' WHERE Id = {habitacion}";
+                ModificarBase(query);
+                query = $"SELECT * FROM Reservas WHERE FechaCheckIn = '{DateTime.Now.ToString("dd/MM/yyyy")}' AND Antelacion = 'SI'";
+            }
+        }
+
     }
 }
